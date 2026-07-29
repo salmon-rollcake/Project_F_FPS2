@@ -3,7 +3,6 @@ using System.Collections;
 
 namespace MyFPS2
 {
-
     public class WeaponController : MonoBehaviour
     {
         public WeaponData Data { get; private set; }
@@ -15,7 +14,7 @@ namespace MyFPS2
         }
 
         /// <summary>
-        /// 지정된 Target Transform 위치/회전/스케일로 부드럽게 이동
+        /// 무기 스왑 시 사용되는 코루틴 기반 강제 이동 애니메이션
         /// </summary>
         public void AnimateToTransform(Transform targetTransform, bool setActiveOnComplete, System.Action onComplete = null)
         {
@@ -44,27 +43,30 @@ namespace MyFPS2
 
                 transform.position = Vector3.Lerp(startPos, target.position, t);
                 transform.rotation = Quaternion.Slerp(startRot, target.rotation, t);
-                transform.localScale = Vector3.Lerp(startScale, target.lossyScale, t); // 스케일 동기화
+                transform.localScale = Vector3.Lerp(startScale, target.lossyScale, t);
 
                 yield return null;
             }
 
-            // 최종 위치/회전/스케일 정착
             SnapToTransform(target);
-
             gameObject.SetActive(setActiveOnComplete);
             onComplete?.Invoke();
         }
 
         /// <summary>
-        /// 목표 Transform으로 위치, 회전, 스케일을 즉시 맞춤
+        /// 목표 위치/회전값으로 실시간 부드럽게 이동 (조준 / 조준 해제용)
         /// </summary>
+        public void SmoothMoveTo(Vector3 targetWorldPos, Quaternion targetWorldRot, float speed)
+        {
+            transform.position = Vector3.Lerp(transform.position, targetWorldPos, Time.deltaTime * speed);
+            transform.rotation = Quaternion.Slerp(transform.rotation, targetWorldRot, Time.deltaTime * speed);
+        }
+
         public void SnapToTransform(Transform target)
         {
             transform.position = target.position;
             transform.rotation = target.rotation;
 
-            // 부모 소켓의 스케일에 영향받지 않도록 월드 스케일 기준 대입
             Vector3 parentScale = transform.parent != null ? transform.parent.lossyScale : Vector3.one;
             transform.localScale = new Vector3(
                 target.lossyScale.x / parentScale.x,
