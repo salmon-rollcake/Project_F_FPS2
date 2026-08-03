@@ -3,21 +3,24 @@ using System.Collections.Generic;
 
 namespace MyFPS2
 {
-
     public class PlayerWeaponManager : MonoBehaviour
     {
         [Header("Weapon Sockets")]
         [SerializeField] private Transform weaponParentSocket;
         [SerializeField] private Transform defaultWeaponPosition;
-        [SerializeField] private Transform aimPosition; // 조준 기준 소켓
+        [SerializeField] private Transform aimPosition;
 
         [Header("Camera")]
         [SerializeField] private Camera playerCamera;
         private float _defaultFOV = 60f;
 
-        [Header("Input & Ref")]
+        [Header("Input & System Ref")]
         [SerializeField] private PlayerInputHandler inputHandler;
         [SerializeField] private CrosshairManager crosshairManager;
+        [SerializeField] private WeaponSwayAndBob weaponSwayAndBob;
+        [SerializeField] private SnipeScopeUI snipeScopeUI;
+        [SerializeField] private ChargeUI chargeUI;
+        [SerializeField] private WeaponRecoil weaponRecoil;
 
         [Header("Initial Loadout")]
         [SerializeField] private List<WeaponData> startingWeapons = new List<WeaponData>();
@@ -26,16 +29,17 @@ namespace MyFPS2
         private int _currentWeaponIndex = -1;
         private bool _isSwapping = false;
 
+        // Snipe 전용 상태
+        private bool _isInSnipeScopeMode = false;
+        private const float SNIPE_DISTANCE_THRESHOLD = 0.05f; // AimPoint 도달 판정 거리
+
         private void Awake()
         {
-            if (inputHandler == null)
-                inputHandler = GetComponentInParent<PlayerInputHandler>();
-
-            if (playerCamera == null && Camera.main != null)
-                playerCamera = Camera.main;
-
-            if (playerCamera != null)
-                _defaultFOV = playerCamera.fieldOfView;
+            if (inputHandler == null) inputHandler = GetComponentInParent<PlayerInputHandler>();
+            if (weaponSwayAndBob == null) weaponSwayAndBob = GetComponent<WeaponSwayAndBob>();
+            if (weaponRecoil == null) weaponRecoil = GetComponent<WeaponRecoil>(); // 반동 컴포넌트 참조
+            if (playerCamera == null && Camera.main != null) playerCamera = Camera.main;
+            if (playerCamera != null) _defaultFOV = playerCamera.fieldOfView;
         }
 
         private void Start()
@@ -46,7 +50,13 @@ namespace MyFPS2
         private void Update()
         {
             HandleInput();
-            HandleAiming();
+            HandleAimingAndVisuals();
+
+            // 현재 무기 사격 로직
+            if (_currentWeaponIndex >= 0 && _currentWeaponIndex < _equippedWeapons.Count && !_isSwapping)
+            {
+                _equippedWeapons[_currentWeaponIndex].HandleFiring(inputHandler);
+            }
         }
 
         private void InitializeWeapons()
@@ -66,8 +76,11 @@ namespace MyFPS2
 
                 weaponCtrl.Initialize(data);
                 weaponCtrl.SnapToTransform(weaponParentSocket);
-                instance.SetActive(false);
 
+                // Charge UI 연동
+                weaponCtrl.OnChargeProgressChanged += OnChargeProgressChanged;
+
+                instance.SetActive(false);
                 _equippedWeapons.Add(weaponCtrl);
             }
 
@@ -77,18 +90,21 @@ namespace MyFPS2
             }
         }
 
+        private void OnChargeProgressChanged(float ratio)
+        {
+            if (chargeUI != null) chargeUI.UpdateChargeProgress(ratio);
+        }
+
         private void EquipWeaponInstant(int index)
         {
             _currentWeaponIndex = index;
             WeaponController activeWeapon = _equippedWeapons[_currentWeaponIndex];
 
             activeWeapon.SnapToTransform(defaultWeaponPosition);
+            activeWeapon.SetWeaponVisibility(true);
             activeWeapon.gameObject.SetActive(true);
 
-            if (crosshairManager != null && activeWeapon.Data != null)
-            {
-                crosshairManager.SetCrosshair(activeWeapon.Data);
-            }
+            UpdateCrosshairForWeapon(activeWeapon.Data);
         }
 
         private void HandleInput()
@@ -116,67 +132,149 @@ namespace MyFPS2
             if (_isSwapping || newIndex == _currentWeaponIndex || newIndex < 0 || newIndex >= _equippedWeapons.Count)
                 return;
 
+            ExitSnipeMode(); // 교체 전 저격 모드 초기화
+
             _isSwapping = true;
             WeaponController currentWeapon = _equippedWeapons[_currentWeaponIndex];
             WeaponController nextWeapon = _equippedWeapons[newIndex];
 
+            currentWeapon.SetWeaponVisibility(true);
             currentWeapon.AnimateToTransform(weaponParentSocket, false, () =>
             {
                 nextWeapon.SnapToTransform(weaponParentSocket);
+                nextWeapon.SetWeaponVisibility(true);
 
                 nextWeapon.AnimateToTransform(defaultWeaponPosition, true, () =>
                 {
                     _currentWeaponIndex = newIndex;
                     _isSwapping = false;
 
-                    if (crosshairManager != null && nextWeapon.Data != null)
-                    {
-                        crosshairManager.SetCrosshair(nextWeapon.Data);
-                    }
+                    UpdateCrosshairForWeapon(nextWeapon.Data);
                 });
             });
         }
 
-        /// <summary>
-        /// 조준 및 FOV 보간 처리
-        /// </summary>
-        private void HandleAiming()
+        private void UpdateCrosshairForWeapon(WeaponData data)
+        {
+            if (crosshairManager == null || data == null) return;
+
+            // Snipe 타입은 기본 상태에서 크로스헤어를 비활성화
+            if (data.fireType == WeaponFireType.Snipe)
+            {
+                crosshairManager.SetCrosshair(null);
+            }
+            else
+            {
+                crosshairManager.SetCrosshair(data);
+            }
+        }
+
+        private void HandleAimingAndVisuals()
         {
             if (_currentWeaponIndex < 0 || _currentWeaponIndex >= _equippedWeapons.Count || _isSwapping)
                 return;
 
             WeaponController activeWeapon = _equippedWeapons[_currentWeaponIndex];
             WeaponData data = activeWeapon.Data;
+            bool isAimingInput = inputHandler != null && inputHandler.IsAiming;
 
-            bool isAiming = inputHandler != null && inputHandler.IsAiming;
-
-            // 1. 무기 Target Transform & Offset 계산
-            Vector3 targetPos;
-            Quaternion targetRot;
+            // 1. Target Position & FOV 계산
+            Vector3 basePos;
+            Quaternion baseRot;
             float targetFOV;
 
-            if (isAiming)
+            if (isAimingInput)
             {
-                // AimPosition 기준 + WeaponData의 Offset 반영
-                targetPos = aimPosition.TransformPoint(data.aimPositionOffset);
-                targetRot = aimPosition.rotation * Quaternion.Euler(data.aimRotationOffset);
-                targetFOV = data.aimFOV;
+                basePos = aimPosition.TransformPoint(data.aimPositionOffset);
+                baseRot = aimPosition.rotation * Quaternion.Euler(data.aimRotationOffset);
+
+                targetFOV = (data.fireType == WeaponFireType.Snipe) ? data.snipeFOV : data.aimFOV;
             }
             else
             {
-                // DefaultPosition 기준
-                targetPos = defaultWeaponPosition.position;
-                targetRot = defaultWeaponPosition.rotation;
+                basePos = defaultWeaponPosition.position;
+                baseRot = defaultWeaponPosition.rotation;
                 targetFOV = _defaultFOV;
+
+                if (_isInSnipeScopeMode)
+                {
+                    ExitSnipeMode();
+                }
             }
 
-            // 2. 무기 위치 및 FOV 부드럽게 이동
+            // 2. Sway, Bobbing, Recoil 오프셋 계산
+            Vector3 swayPos = Vector3.zero;
+            Quaternion swayRot = Quaternion.identity;
+            Vector3 bobPos = Vector3.zero;
+
+            Vector3 recoilPos = Vector3.zero;
+            Quaternion recoilRot = Quaternion.identity;
+
+            // Sway & Bobbing (저격 스코프 모드가 아닐 때)
+            if (weaponSwayAndBob != null && !_isInSnipeScopeMode)
+            {
+                weaponSwayAndBob.CalculateSway(data, isAimingInput, out swayPos, out swayRot);
+                bobPos = weaponSwayAndBob.CalculateBobbing(data, isAimingInput);
+            }
+
+            // -------------------------------------------------------------
+            // 반동 계산 (저격 스코프 모드가 아닐 때)
+            // -------------------------------------------------------------
+            if (weaponRecoil != null && !_isInSnipeScopeMode)
+            {
+                weaponRecoil.CalculateRecoil(data, out recoilPos, out recoilRot);
+            }
+
+            // 3. 최종 위치 및 회전 연산 (Sway + Bobbing + Recoil 위치 및 회전 합성)
+            Vector3 finalPos = basePos + defaultWeaponPosition.TransformDirection(swayPos + bobPos + recoilPos);
+            Quaternion finalRot = baseRot * swayRot * recoilRot;
+
             float speed = data.aimSpeed;
-            activeWeapon.SmoothMoveTo(targetPos, targetRot, speed);
+            activeWeapon.SmoothMoveTo(finalPos, finalRot, speed);
 
             if (playerCamera != null)
             {
                 playerCamera.fieldOfView = Mathf.Lerp(playerCamera.fieldOfView, targetFOV, Time.deltaTime * speed);
+            }
+
+            // 4. Snipe 판정
+            if (data.fireType == WeaponFireType.Snipe && isAimingInput)
+            {
+                float distToAimPoint = Vector3.Distance(activeWeapon.transform.position, basePos);
+
+                if (distToAimPoint <= SNIPE_DISTANCE_THRESHOLD && !_isInSnipeScopeMode)
+                {
+                    EnterSnipeMode(activeWeapon, data);
+                }
+            }
+        }
+
+        private void EnterSnipeMode(WeaponController activeWeapon, WeaponData data)
+        {
+            _isInSnipeScopeMode = true;
+
+            // 무기 안보이게 처리 & 스코프 UI 켜기
+            activeWeapon.SetWeaponVisibility(false);
+            if (snipeScopeUI != null)
+            {
+                snipeScopeUI.ShowScope(data.scopeOverlaySprite);
+            }
+        }
+
+        private void ExitSnipeMode()
+        {
+            if (!_isInSnipeScopeMode) return;
+
+            _isInSnipeScopeMode = false;
+
+            if (_currentWeaponIndex >= 0 && _currentWeaponIndex < _equippedWeapons.Count)
+            {
+                _equippedWeapons[_currentWeaponIndex].SetWeaponVisibility(true);
+            }
+
+            if (snipeScopeUI != null)
+            {
+                snipeScopeUI.HideScope();
             }
         }
     }

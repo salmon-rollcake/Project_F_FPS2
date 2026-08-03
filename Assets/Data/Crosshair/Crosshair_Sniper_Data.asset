@@ -1,0 +1,20 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1250bdd6993e95941b7eac2c6827bc9b, type: 3}
+  m_Name: Crosshair_Sniper_Data
+  m_EditorClassIdentifier: Assembly-CSharp::MyFPS2.CrosshairData
+  crosshairSprite: {fileID: 0}
+  defaultSize: {x: 32, y: 32}
+  targetAcquiredSize: {x: 48, y: 48}
+  defaultColor: {r: 1, g: 1, b: 1, a: 1}
+  targetAcquiredColor: {r: 1, g: 0, b: 0, a: 1}
+  transitionSpeed: 15

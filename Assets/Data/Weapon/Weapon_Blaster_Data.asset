@@ -13,7 +13,43 @@ MonoBehaviour:
   m_Name: Weapon_Blaster_Data
   m_EditorClassIdentifier: Assembly-CSharp::MyFPS2.WeaponData
   weaponName: Blaster
-  weaponPrefab: {fileID: 2225486910712267859, guid: f8d0f5e493ee9ac458392c291b57caee, type: 3}
+  weaponPrefab: {fileID: 7789590000738736110, guid: 5d775d58336125a42b2e2951f40f9645, type: 3}
+  fireType: 1
+  bulletPrefab: {fileID: 1409457967816299190, guid: 3da011cc76e649944a10be749983bd20, type: 3}
   range: 80
+  damage: 15
+  fireRate: 0.5
+  chargeTime: 0
+  bulletSpeed: 300
+  bulletGravity: 0
+  bulletLifeTime: 5
+  bulletsPerShot: 1
+  spreadAngle: 0.5
+  isExplosive: 0
+  explosionRadius: 3
+  muzzleFlashPrefab: {fileID: 748781637555137343, guid: 3f5b545b9a1e74c418b061bba5bb9e2c, type: 3}
+  fireSound: {fileID: 8300000, guid: f8e7d20c14d8bb24a85cc4f0e4858e9b, type: 3}
+  snipeFOV: 15
+  scopeOverlaySprite: {fileID: 0}
   crosshairData: {fileID: 11400000, guid: 682de068bf9230c49a4ac67fcec9b1cc, type: 2}
-  swapDuration: 1
+  aimPositionOffset: {x: 0, y: 0, z: 0}
+  aimRotationOffset: {x: 0, y: 0, z: 0}
+  aimFOV: 40
+  aimSpeed: 12
+  swayAmount: 0.02
+  maxSwayAmount: 0.05
+  swayRotationAmount: 2
+  swaySmoothness: 8
+  walkBobFrequency: 10
+  walkBobAmount: 0.015
+  sprintBobFrequency: 16
+  sprintBobAmount: 0.05
+  kickBackAmount: 0.15
+  kickUpAmount: 0.1
+  kickRotationX: 5
+  kickRotationRandomY: 1.5
+  maxPositionOffset: 0.2
+  maxRotationOffset: 15
+  recoilSpeed: 30
+  returnSpeed: 12
+  swapDuration: 0.5
