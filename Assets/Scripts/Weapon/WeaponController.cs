@@ -8,6 +8,10 @@ namespace MyFPS2
     {
         public WeaponData Data { get; private set; }
 
+        // 현재 남은 탄약 수량 (외부에서 읽기 전용)
+        public int CurrentAmmo { get; private set; }
+        public bool IsReloading { get; private set; }
+
         private Vector3 _originalScale = Vector3.one;
         private float _lastFireTime;
         private float _currentChargeTimer;
@@ -15,21 +19,25 @@ namespace MyFPS2
 
         public event Action<float> OnChargeProgressChanged;
 
+        // 재장전 진행률 이벤트 (0.0 ~ 1.0)
+        public event Action<float> OnReloadProgressChanged;
+        // 재장전 완료 이벤트
+        public event Action OnReloadCompleted;
+
         private Renderer[] _weaponRenderers;
         private Coroutine _moveCoroutine;
+        private Coroutine _reloadCoroutine;
 
-        // 반동 스크립트 참조 추가
         [SerializeField] private WeaponRecoil weaponRecoil;
 
         [Header("Muzzle Reference")]
-        [SerializeField] private Transform muzzleTransform; // 총구 Transform
+        [SerializeField] private Transform muzzleTransform;
 
         private void Awake()
         {
             _weaponRenderers = GetComponentsInChildren<Renderer>();
             _originalScale = transform.localScale;
 
-            // 부모 오브젝트(Player/WeaponHolder)에서 WeaponRecoil 컴포넌트 자동 검색
             if (weaponRecoil == null)
             {
                 weaponRecoil = GetComponentInParent<WeaponRecoil>();
@@ -42,7 +50,12 @@ namespace MyFPS2
             _isCharging = false;
             _currentChargeTimer = 0f;
 
-            // 동적 생성 후 부모 설정 시점에 다시 한번 참조 확인
+            // 무기 초기화 시 최대 탄약으로 탄약 채움
+            if (Data != null)
+            {
+                CurrentAmmo = Data.maxAmmo;
+            }
+
             if (weaponRecoil == null)
             {
                 weaponRecoil = GetComponentInParent<WeaponRecoil>();
@@ -51,7 +64,16 @@ namespace MyFPS2
 
         public void HandleFiring(PlayerInputHandler input)
         {
-            if (Data == null) return;
+            if (Data == null || IsReloading) return;
+
+            // R 키 입력 시 재장전 시작
+            if (Input.GetKeyDown(KeyCode.R) && CurrentAmmo < Data.maxAmmo)
+            {
+                StartReload();
+                return;
+            }
+
+            if (CurrentAmmo <= 0) return;
 
             switch (Data.fireType)
             {
@@ -110,27 +132,106 @@ namespace MyFPS2
             OnChargeProgressChanged?.Invoke(0f);
         }
 
+        public void StartReload()
+        {
+            if (IsReloading || CurrentAmmo >= Data.maxAmmo) return;
+
+            if (_reloadCoroutine != null) StopCoroutine(_reloadCoroutine);
+            _reloadCoroutine = StartCoroutine(Co_Reload());
+        }
+
+        private IEnumerator Co_Reload()
+        {
+            IsReloading = true;
+            float elapsed = 0f;
+            float duration = (Data != null && Data.reloadTime > 0f) ? Data.reloadTime : 2.0f;
+
+            while (elapsed < duration)
+            {
+                elapsed += Time.deltaTime;
+                float progress = Mathf.Clamp01(elapsed / duration);
+                
+                // HUD로 재장전 Fill 게이지(0~1) 전달
+                OnReloadProgressChanged?.Invoke(progress);
+                yield return null;
+            }
+
+            CurrentAmmo = Data.maxAmmo;
+            IsReloading = false;
+
+            // 재장전 완료 이벤트 호출
+            OnReloadCompleted?.Invoke();
+        }
+
+        // 무기 교체 등으로 취소될 경우 코루틴 정지
+        private void OnDisable()
+        {
+            if (IsReloading)
+            {
+                IsReloading = false;
+                if (_reloadCoroutine != null) StopCoroutine(_reloadCoroutine);
+            }
+        }
+
         private void ExecuteShoot()
         {
+            // 탄약 소모
+            CurrentAmmo = Mathf.Max(0, CurrentAmmo - 1);
             _lastFireTime = Time.time;
 
             if (Data != null && Data.bulletPrefab != null && muzzleTransform != null)
             {
-                // bulletsPerShot 수만큼 반복 생성 (일반 총은 1회, 샷건은 지정된 수만큼)
+                // 1. 화면 중앙(크로스헤어) 기준 목표 지점(Target Point) 계산
+                Vector3 targetPoint;
+                Camera mainCam = Camera.main;
+
+                if (mainCam != null)
+                {
+                    // 화면 중앙에서 레이 생성
+                    Ray ray = mainCam.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0f));
+                    float maxRayDistance = 500f; // 레이캐스트 최대 거리
+
+                    // 무언가 피격되었다면 그 지점을 목표로 설정
+                    if (Physics.Raycast(ray, out RaycastHit hit, maxRayDistance))
+                    {
+                        targetPoint = hit.point;
+                    }
+                    else
+                    {
+                        // 공중이거나 부딪힌 대상이 없으면 원거리 상의 정면 지점을 목표로 설정
+                        targetPoint = ray.GetPoint(maxRayDistance);
+                    }
+                }
+                else
+                {
+                    // 예외 처리: 카메라인 경우 총구 정면 사용
+                    targetPoint = muzzleTransform.position + muzzleTransform.forward * 100f;
+                }
+
+                // 2. 총구(Muzzle)에서 목표 지점으로 향하는 기본 방향 계산
+                Vector3 baseDirection = (targetPoint - muzzleTransform.position).normalized;
+                
                 int count = Mathf.Max(1, Data.bulletsPerShot);
 
                 for (int i = 0; i < count; i++)
                 {
-                    // 산탄 퍼짐 각도 계산 (spreadAngle 적용)
                     Vector3 fireDirection = muzzleTransform.forward;
 
+                    // 산탄/퍼짐 각도(Spread Angle) 적용
                     if (Data.spreadAngle > 0f)
                     {
-                        Vector2 randomCircle = UnityEngine.Random.insideUnitCircle * Mathf.Tan(Data.spreadAngle * 0.5f * Mathf.Deg2Rad);
-                        fireDirection += muzzleTransform.right * randomCircle.x + muzzleTransform.up * randomCircle.y;
+                        // baseDirection을 기준으로 임의의 산탄 회전 오프셋 적용
+                        Quaternion randomSpread = Quaternion.Euler(
+                            UnityEngine.Random.Range(-Data.spreadAngle, Data.spreadAngle) * 0.5f,
+                            UnityEngine.Random.Range(-Data.spreadAngle, Data.spreadAngle) * 0.5f,
+                            0f
+                        );
+
+                        fireDirection = Quaternion.LookRotation(baseDirection) * randomSpread * Vector3.forward;
                         fireDirection.Normalize();
                     }
 
+                    // 탄환 생성 및 회전값 적용 (화면 중앙 목표 지점을 바라보도록 생성)
                     GameObject bulletObj = Instantiate(Data.bulletPrefab, muzzleTransform.position, Quaternion.LookRotation(fireDirection));
 
                     if (bulletObj.TryGetComponent<Bullet>(out var bullet))
@@ -169,7 +270,18 @@ namespace MyFPS2
                 weaponRecoil.TriggerRecoil(Data);
             }
 
-            Debug.Log($"[{Data.weaponName}] {Data.fireType} 사격! (발사체 수: {Data.bulletsPerShot})");
+            Debug.Log($"[{Data.weaponName}] 사격! (남은 탄약: {CurrentAmmo}/{Data.maxAmmo})");
+        }
+
+        /// <summary>
+        /// 재장전 메서드 (필요시 호출)
+        /// </summary>
+        public void Reload()
+        {
+            if (Data != null)
+            {
+                CurrentAmmo = Data.maxAmmo;
+            }
         }
 
         public void SetWeaponVisibility(bool isVisible)

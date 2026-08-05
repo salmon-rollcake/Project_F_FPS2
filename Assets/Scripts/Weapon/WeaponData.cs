@@ -38,6 +38,14 @@ namespace MyFPS2
         [Tooltip("탄환 탄착군 퍼짐 정도 (각도)")]
         public float spreadAngle = 5f;
 
+        [Header("Ammo Settings")]
+        [Tooltip("해당 무기의 최대 탄약 수량")]
+        public int maxAmmo = 30;
+
+        [Header("Reload Settings")]
+        [Tooltip("재장전 소요 시간 (초)")]
+        public float reloadTime = 2.0f;
+
         [Header("Explosive / Area Damage Settings")]
         [Tooltip("범위 공격(스플래시) 여부")]
         public bool isExplosive = false;

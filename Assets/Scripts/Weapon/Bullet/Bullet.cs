@@ -57,9 +57,22 @@ namespace MyFPS2
             if (_hasHit) return;
             _hasHit = true;
 
-            // 충돌 지점 및 법선 계산
-            Vector3 hitPoint = other.ClosestPoint(transform.position);
+            // 충돌 지점 및 법선 계산 (Concave MeshCollider 대응)
+            Vector3 hitPoint = transform.position;
             Vector3 hitNormal = -transform.forward;
+
+            // Raycast를 사용해 정확한 충돌지점(hitPoint)과 표면 법선(hitNormal)을 추출
+            Ray ray = new Ray(transform.position - transform.forward * 0.5f, transform.forward);
+            if (other.Raycast(ray, out RaycastHit hit, 1.0f))
+            {
+                hitPoint = hit.point;
+                hitNormal = hit.normal;
+            }
+            // Convex MeshCollider 또는 일반 Collider일 경우에만 ClosestPoint 사용
+            else if (other is BoxCollider || other is SphereCollider || other is CapsuleCollider || (other is MeshCollider meshCol && meshCol.convex))
+            {
+                hitPoint = other.ClosestPoint(transform.position);
+            }
 
             // 1. 적(Enemy) / 피격 대상 데미지 처리
             if (_isExplosive)

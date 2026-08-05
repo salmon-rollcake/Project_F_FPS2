@@ -25,6 +25,9 @@ namespace MyFPS2
         [Header("Initial Loadout")]
         [SerializeField] private List<WeaponData> startingWeapons = new List<WeaponData>();
 
+        [Header("UI Reference")]
+        [SerializeField] private WeaponHUDManager hudManager; // 통합 HUD 매니저 참조
+
         private readonly List<WeaponController> _equippedWeapons = new List<WeaponController>();
         private int _currentWeaponIndex = -1;
         private bool _isSwapping = false;
@@ -37,7 +40,7 @@ namespace MyFPS2
         {
             if (inputHandler == null) inputHandler = GetComponentInParent<PlayerInputHandler>();
             if (weaponSwayAndBob == null) weaponSwayAndBob = GetComponent<WeaponSwayAndBob>();
-            if (weaponRecoil == null) weaponRecoil = GetComponent<WeaponRecoil>(); // 반동 컴포넌트 참조
+            if (weaponRecoil == null) weaponRecoil = GetComponent<WeaponRecoil>();
             if (playerCamera == null && Camera.main != null) playerCamera = Camera.main;
             if (playerCamera != null) _defaultFOV = playerCamera.fieldOfView;
         }
@@ -45,6 +48,14 @@ namespace MyFPS2
         private void Start()
         {
             InitializeWeapons();
+
+            // 보유 무기 개수에 맞춰 HUD 슬롯 생성 및 초기화
+            if (hudManager != null && _equippedWeapons.Count > 0)
+            {
+                hudManager.InitializeHUD(_equippedWeapons.Count);
+                hudManager.RegisterWeaponEvents(_equippedWeapons);
+                hudManager.UpdateHUD(_equippedWeapons, _currentWeaponIndex);
+            }
         }
 
         private void Update()
@@ -52,11 +63,14 @@ namespace MyFPS2
             HandleInput();
             HandleAimingAndVisuals();
 
-            // 현재 무기 사격 로직
+            // 현재 무기 사격 로직 처리
             if (_currentWeaponIndex >= 0 && _currentWeaponIndex < _equippedWeapons.Count && !_isSwapping)
             {
                 _equippedWeapons[_currentWeaponIndex].HandleFiring(inputHandler);
             }
+
+            // 실시간 HUD (탄약 수치, 게이지, 선택 상태 등) 업데이트
+            UpdateHUD();
         }
 
         private void InitializeWeapons()
@@ -111,6 +125,17 @@ namespace MyFPS2
         {
             if (_isSwapping || _equippedWeapons.Count <= 1) return;
 
+            // 숫자키 조작 (1~9번 무기)
+            for (int i = 0; i < _equippedWeapons.Count; i++)
+            {
+                if (Input.GetKeyDown(KeyCode.Alpha1 + i))
+                {
+                    SwitchWeapon(i);
+                    return;
+                }
+            }
+
+            // 키보드 E/Q 및 마우스 휠 조작
             if (Input.GetKeyDown(KeyCode.E) || Input.GetAxis("Mouse ScrollWheel") < -0.01f)
             {
                 SelectNextWeapon(1);
@@ -150,6 +175,7 @@ namespace MyFPS2
                     _isSwapping = false;
 
                     UpdateCrosshairForWeapon(nextWeapon.Data);
+                    UpdateHUD();
                 });
             });
         }
@@ -158,7 +184,6 @@ namespace MyFPS2
         {
             if (crosshairManager == null || data == null) return;
 
-            // Snipe 타입은 기본 상태에서 크로스헤어를 비활성화
             if (data.fireType == WeaponFireType.Snipe)
             {
                 crosshairManager.SetCrosshair(null);
@@ -178,7 +203,7 @@ namespace MyFPS2
             WeaponData data = activeWeapon.Data;
             bool isAimingInput = inputHandler != null && inputHandler.IsAiming;
 
-            // 1. Target Position & FOV 계산
+            // 1. Target Position & FOV 연산
             Vector3 basePos;
             Quaternion baseRot;
             float targetFOV;
@@ -202,7 +227,7 @@ namespace MyFPS2
                 }
             }
 
-            // 2. Sway, Bobbing, Recoil 오프셋 계산
+            // 2. Sway, Bobbing, Recoil 연산
             Vector3 swayPos = Vector3.zero;
             Quaternion swayRot = Quaternion.identity;
             Vector3 bobPos = Vector3.zero;
@@ -210,22 +235,18 @@ namespace MyFPS2
             Vector3 recoilPos = Vector3.zero;
             Quaternion recoilRot = Quaternion.identity;
 
-            // Sway & Bobbing (저격 스코프 모드가 아닐 때)
             if (weaponSwayAndBob != null && !_isInSnipeScopeMode)
             {
                 weaponSwayAndBob.CalculateSway(data, isAimingInput, out swayPos, out swayRot);
                 bobPos = weaponSwayAndBob.CalculateBobbing(data, isAimingInput);
             }
 
-            // -------------------------------------------------------------
-            // 반동 계산 (저격 스코프 모드가 아닐 때)
-            // -------------------------------------------------------------
             if (weaponRecoil != null && !_isInSnipeScopeMode)
             {
                 weaponRecoil.CalculateRecoil(data, out recoilPos, out recoilRot);
             }
 
-            // 3. 최종 위치 및 회전 연산 (Sway + Bobbing + Recoil 위치 및 회전 합성)
+            // 3. 최종 위치 및 회전 연산 적용
             Vector3 finalPos = basePos + defaultWeaponPosition.TransformDirection(swayPos + bobPos + recoilPos);
             Quaternion finalRot = baseRot * swayRot * recoilRot;
 
@@ -253,7 +274,6 @@ namespace MyFPS2
         {
             _isInSnipeScopeMode = true;
 
-            // 무기 안보이게 처리 & 스코프 UI 켜기
             activeWeapon.SetWeaponVisibility(false);
             if (snipeScopeUI != null)
             {
@@ -275,6 +295,17 @@ namespace MyFPS2
             if (snipeScopeUI != null)
             {
                 snipeScopeUI.HideScope();
+            }
+        }
+
+        /// <summary>
+        /// HUD 매니저에 현재 상태 전파
+        /// </summary>
+        public void UpdateHUD()
+        {
+            if (hudManager != null && _equippedWeapons.Count > 0)
+            {
+                hudManager.UpdateHUD(_equippedWeapons, _currentWeaponIndex);
             }
         }
     }

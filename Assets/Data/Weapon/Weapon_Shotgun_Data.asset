@@ -25,6 +25,7 @@ MonoBehaviour:
   bulletLifeTime: 5
   bulletsPerShot: 8
   spreadAngle: 5
+  maxAmmo: 8
   isExplosive: 0
   explosionRadius: 3
   muzzleFlashPrefab: {fileID: 748781637555137343, guid: 4f5d4e5eaa0e5104791549cea3dc3f23, type: 3}

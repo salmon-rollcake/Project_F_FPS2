@@ -11,6 +11,9 @@ GameObject:
   - component: {fileID: 2451427203167841591}
   - component: {fileID: 4358503012591421098}
   - component: {fileID: 4806971140660982396}
+  - component: {fileID: 8559612149391386794}
+  - component: {fileID: 1340111932214914005}
+  - component: {fileID: 1448410702679948157}
   m_Layer: 7
   m_Name: Projectile_Disc
   m_TagString: Untagged
@@ -91,6 +94,68 @@ MeshRenderer:
   m_SortingOrder: 0
   m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}
+--- !u!65 &8559612149391386794
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1258498565264711776}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 1
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 0.5290978, y: 0.06906335, z: 0.5242504}
+  m_Center: {x: 0.000000014901161, y: 0.0000000018626451, z: 0.00000016391277}
+--- !u!54 &1340111932214914005
+Rigidbody:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1258498565264711776}
+  serializedVersion: 5
+  m_Mass: 1
+  m_LinearDamping: 0
+  m_AngularDamping: 0.05
+  m_CenterOfMass: {x: 0, y: 0, z: 0}
+  m_InertiaTensor: {x: 1, y: 1, z: 1}
+  m_InertiaRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ImplicitCom: 1
+  m_ImplicitTensor: 1
+  m_UseGravity: 1
+  m_IsKinematic: 0
+  m_Interpolate: 0
+  m_Constraints: 0
+  m_CollisionDetection: 0
+--- !u!114 &1448410702679948157
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1258498565264711776}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6d07366e14d8390439126629f8f2d5a3, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::MyFPS2.Bullet
+  hitEffectPrefab: {fileID: 0}
+  hitSound: {fileID: 0}
 --- !u!1 &7825329975489522953
 GameObject:
   m_ObjectHideFlags: 0
